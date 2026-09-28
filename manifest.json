@@ -1,0 +1,16 @@
+{
+  "manifest_version": 2,
+  "name": "Replace PDF",
+  "version": "1.1.1",
+  "description": "Right-click a paper → Replace PDF… swaps its PDF for a new file in place: same file name, no delete, so iCloud syncs it as an edit.",
+  "author": "Adam Sghaier",
+  "applications": {
+    "zotero": {
+      "id": "replace-pdf@adamsghaier.local",
+      "update_url": "https://raw.githubusercontent.com/adamsghaier/zotero-replace-pdf/main/updates.json",
+      "strict_min_version": "8.0",
+      "strict_max_version": "10.*"
+    }
+  },
+  "homepage_url": "https://github.com/adamsghaier/zotero-replace-pdf"
+}
