@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "Replace PDF",
-  "version": "1.1.1",
-  "description": "Right-click a paper → Replace PDF… swaps its PDF for a new file in place: same file name, no delete, so iCloud syncs it as an edit.",
+  "version": "1.2.0",
+  "description": "Right-click a paper → Add PDF or Replace PDF. Replacing writes the new PDF into the existing file (same name, no delete), so iCloud syncs it as an edit. The picked file is cleared from Downloads.",
   "author": "Adam Sghaier",
   "applications": {
     "zotero": {
