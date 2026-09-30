@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Replace PDF",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Right-click a paper → Add PDF or Replace PDF. Replacing writes the new PDF into the existing file (same name, no delete), so iCloud syncs it as an edit. The picked file is cleared from Downloads.",
   "author": "Adam Sghaier",
   "applications": {

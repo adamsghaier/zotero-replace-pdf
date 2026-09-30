@@ -28,7 +28,8 @@ Downloads folder it's removed once Zotero's copy has been verified byte for byte
 ZotMoov's Attach New File does. A file picked from anywhere else is left alone.
 
 **It also hides Better BibTeX's submenu** in the item right-click menu, to keep that
-menu short. Better BibTeX's Tools and File menus are unaffected.
+menu short. Better BibTeX's Tools and File menus are unaffected. (It sets the item's `hidden`
+property, since macOS's native menus ignore CSS.)
 
 Works with stored and linked files. Zotero 8–10.
 

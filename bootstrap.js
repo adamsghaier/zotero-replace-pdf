@@ -30,7 +30,9 @@
  * many there are before anything changes.
  *
  * It also hides Better BibTeX's submenu in the item context menu, to keep that
- * menu short. Better BibTeX's Tools and File menus are unaffected.
+ * menu short. Better BibTeX's Tools and File menus are unaffected. On macOS that
+ * menu is a native menu, which ignores CSS, so the item is hidden the way Zotero's
+ * own menu API hides items: by setting `hidden` on it whenever it's added.
  */
 
 var { FilePicker } = ChromeUtils.importESModule("chrome://zotero/content/modules/filePicker.mjs");
@@ -38,9 +40,8 @@ var { FilePicker } = ChromeUtils.importESModule("chrome://zotero/content/modules
 var menuID = null;
 const FTL = "replace-pdf.ftl";
 const TITLE = "Replace PDF";
-const HIDE_CSS = "data:text/css," + encodeURIComponent(
-  '#zotero-itemmenu .zotero-custom-menu-item[data-l10n-id="better-bibtex"] { display: none !important; }'
-);
+const HIDDEN_MENUS = '.zotero-custom-menu-item[data-l10n-id="better-bibtex"]';
+var menuWatchers = new Map();   // window → { popup, observer, onShowing }
 
 function log(msg) {
   Zotero.debug("ReplacePDF: " + msg);
@@ -268,10 +269,38 @@ async function replacePDF(items, win) {
 function install() {}
 function uninstall() {}
 
+function hideMenus(popup) {
+  for (let el of popup.querySelectorAll(HIDDEN_MENUS)) {
+    if (!el.hidden) el.hidden = true;
+  }
+}
+
+// Zotero adds plugin menu items after the menu starts opening (and reuses them
+// next time), so hide them both when the menu opens and whenever items are added.
+function watchItemMenu(window) {
+  let popup = window.document.getElementById("zotero-itemmenu");
+  if (!popup || menuWatchers.has(window)) return;
+  let onShowing = () => hideMenus(popup);
+  let observer = new window.MutationObserver(() => hideMenus(popup));
+  observer.observe(popup, { childList: true, subtree: true });
+  popup.addEventListener("popupshowing", onShowing);
+  menuWatchers.set(window, { popup, observer, onShowing });
+  hideMenus(popup);
+}
+
+function unwatchItemMenu(window) {
+  let w = menuWatchers.get(window);
+  if (!w) return;
+  w.observer.disconnect();
+  w.popup.removeEventListener("popupshowing", w.onShowing);
+  for (let el of w.popup.querySelectorAll(HIDDEN_MENUS)) el.hidden = false;
+  menuWatchers.delete(window);
+}
+
 function onMainWindowLoad({ window }) {
   window.MozXULElement.insertFTLIfNeeded(FTL);
   try {
-    window.windowUtils.loadSheetUsingURIString(HIDE_CSS, window.windowUtils.AUTHOR_SHEET);
+    watchItemMenu(window);
   }
   catch (e) {
     Zotero.logError(e);
@@ -280,12 +309,7 @@ function onMainWindowLoad({ window }) {
 
 function onMainWindowUnload({ window }) {
   window.document.querySelector(`link[href="${FTL}"]`)?.remove();
-  try {
-    window.windowUtils.removeSheetUsingURIString(HIDE_CSS, window.windowUtils.AUTHOR_SHEET);
-  }
-  catch (e) {
-    // not loaded
-  }
+  unwatchItemMenu(window);
 }
 
 function run(action, context, what, hint = "") {
