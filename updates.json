@@ -21,6 +21,16 @@
               "strict_min_version": "8.0"
             }
           }
+        },
+        {
+          "version": "1.2.1",
+          "update_link": "https://github.com/adamsghaier/zotero-replace-pdf/releases/download/v1.2.1/replace-pdf.xpi",
+          "update_hash": "sha256:addfc1ed1504381ca3c5abec307d9b9b2ebe5149fc1c17b0f9a590e431c73ccd",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "8.0"
+            }
+          }
         }
       ]
     }
