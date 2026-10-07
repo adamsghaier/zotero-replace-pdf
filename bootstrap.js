@@ -25,12 +25,15 @@
  * Downloads once Zotero's copy has verified byte for byte. A file picked from
  * anywhere else is left where it is.
  *
- * On macOS, either way the PDF's Date Created and Date Added (Finder columns) are
- * set to the date the paper was added to Zotero, so a folder sorted by either keeps
- * Zotero's order. iCloud carries the creation date to Windows, where Explorer's
- * Date created column has the same order. An added PDF would otherwise get today's
- * dates, and ZotMoov moving it into its folder later resets Date Added again, so
- * for Add PDF this waits for that move first.
+ * On macOS, the PDF's Date Created and Date Added (Finder columns) follow the date
+ * the paper was added to Zotero, so a folder sorted by either keeps Zotero's order.
+ * iCloud carries the creation date to Windows, where Explorer's Date created column
+ * has the same order. But changing the creation date of a file iCloud has already
+ * synced makes iCloud for Windows show it as "<name> (1).pdf", so it's only ever set
+ * on a new PDF while it's still in Zotero's storage: ZotMoov's move into its folder
+ * keeps it. That move resets Date Added, so Add PDF waits for it and then sets Date
+ * Added. Replace PDF writes in place, which keeps both dates; it only corrects Date
+ * Added.
  *
  * Highlights stay on the attachment. They're stored as page positions, so on a
  * re-laid-out version they'd sit over the wrong text; the confirmation says how
@@ -152,12 +155,12 @@ function paperAdded(att) {
   return Zotero.Date.sqlToDate((att.parentItem || att).dateAdded, true);
 }
 
-// Set a file's Date Created and Date Added on macOS. Date Added is the time the
-// file entered its folder, which no file API exposes, so call setattrlist(2).
+// Set a file's Date Created and/or Date Added (attrs) on macOS. Date Added is the
+// time the file entered its folder, which no file API exposes, so call setattrlist(2).
 const ATTR_BIT_MAP_COUNT = 5;
 const ATTR_CMN_CRTIME = 0x00000200;
 const ATTR_CMN_ADDEDTIME = 0x10000000;
-function setFileDates(path, date) {
+function setFileDates(path, date, attrs) {
   if (!Zotero.isMac) return;
   let { ctypes } = ChromeUtils.importESModule("resource://gre/modules/ctypes.sys.mjs");
   let libc = ctypes.open("libSystem.B.dylib");
@@ -170,32 +173,40 @@ function setFileDates(path, date) {
     let timespec = ctypes.StructType("timespec", [{ tv_sec: ctypes.long }, { tv_nsec: ctypes.long }]);
     let setattrlist = libc.declare("setattrlist", ctypes.default_abi, ctypes.int,
       ctypes.char.ptr, attrlist.ptr, ctypes.voidptr_t, ctypes.size_t, ctypes.unsigned_int);
-    let list = new attrlist(ATTR_BIT_MAP_COUNT, 0, ATTR_CMN_CRTIME | ATTR_CMN_ADDEDTIME, 0, 0, 0, 0);
+    let list = new attrlist(ATTR_BIT_MAP_COUNT, 0, attrs, 0, 0, 0, 0);
     let sec = Math.floor(date.getTime() / 1000);
-    // One value per attribute, in bit order: created, then added.
-    let Times = ctypes.ArrayType(timespec, 2);
-    let times = new Times([new timespec(sec, 0), new timespec(sec, 0)]);
+    // One value per attribute, in bit order (created, then added); all the same.
+    let names = [[ATTR_CMN_CRTIME, "Date Created"], [ATTR_CMN_ADDEDTIME, "Date Added"]]
+      .filter(([bit]) => attrs & bit).map(([, n]) => n);
+    let Times = ctypes.ArrayType(timespec, names.length);
+    let times = new Times(names.map(() => new timespec(sec, 0)));
     if (setattrlist(path, list.address(), times.address(), Times.size, 0) !== 0) {
       throw new Error(`setattrlist failed for ${path} (errno ${ctypes.errno})`);
     }
-    log(`Date Created and Date Added of ${PathUtils.filename(path)} set to ${date.toISOString()}`);
+    log(`${names.join(" and ")} of ${PathUtils.filename(path)} set to ${date.toISOString()}`);
   }
   finally {
     libc.close();
   }
 }
 
-// ZotMoov moves a new attachment into its folder a moment after it's added, and
-// the move resets Date Added. Wait for the file to land there (up to a minute),
-// then set the dates; without ZotMoov, set them where Zotero put it.
+// A new PDF's dates. Date Created is set now, while the file is still in Zotero's
+// storage (ZotMoov's move keeps it); if ZotMoov has already moved it into the synced
+// folder, it's left alone. The move resets Date Added, so wait for the file to land
+// there (up to a minute) and set Date Added then. Without ZotMoov, set both at once.
 async function matchDatesOnceMoved(att) {
   let dst = Zotero.Prefs.get("extensions.zotmoov.dst_dir", true);
+  let date = paperAdded(att);
   let path = await att.getFilePathAsync();
-  for (let i = 0; dst && i < 60 && !(path && isInside(path, dst)); i++) {
+  if (path && !(dst && isInside(path, dst))) {
+    setFileDates(path, date, ATTR_CMN_CRTIME | ATTR_CMN_ADDEDTIME);
+  }
+  if (!dst) return;
+  for (let i = 0; i < 60 && !(path && isInside(path, dst)); i++) {
     await Zotero.Promise.delay(1000);
     path = await att.getFilePathAsync();
   }
-  if (path) setFileDates(path, paperAdded(att));
+  if (path) setFileDates(path, date, ATTR_CMN_ADDEDTIME);
 }
 
 function alert(win, msg) {
@@ -308,10 +319,11 @@ async function replacePDF(items, win) {
   }
   log(`${name}: replaced ${path}`);
 
-  // Writing in place already keeps the file's Date Created and Date Added; this
-  // also corrects them if they were wrong before.
+  // Writing in place keeps the file's Date Created and Date Added. Correct Date
+  // Added if it was wrong before, but never Date Created: changing it on a synced
+  // file makes iCloud for Windows show the file as "<name> (1).pdf".
   try {
-    setFileDates(path, paperAdded(att));
+    setFileDates(path, paperAdded(att), ATTR_CMN_ADDEDTIME);
   }
   catch (e) {
     Zotero.logError(e);

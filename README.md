@@ -29,7 +29,10 @@ ZotMoov's Attach New File does. A file picked from anywhere else is left alone.
 
 **File dates follow Zotero (macOS).** With either action the PDF's Date Created and
 Date Added are set to the date the paper was added to Zotero, so a folder of PDFs
-sorted by either stays in Zotero's order (in iCloud Drive, Windows' Date created too). For Add PDF this happens once ZotMoov
+sorted by either stays in Zotero's order (in iCloud Drive, Windows' Date created too).
+The creation date is only set on a new PDF before it reaches the synced folder: changing
+it on a file iCloud has already synced makes iCloud for Windows show it as `Name (1).pdf`.
+Replace PDF keeps both dates, and only corrects Date Added. For Add PDF this happens once ZotMoov
 has moved the file into its folder (it waits up to a minute), since that move would
 otherwise reset it.
 
