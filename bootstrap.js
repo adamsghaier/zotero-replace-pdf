@@ -25,6 +25,13 @@
  * Downloads once Zotero's copy has verified byte for byte. A file picked from
  * anywhere else is left where it is.
  *
+ * On macOS, either way the PDF's Date Created and Date Added (Finder columns) are
+ * set to the date the paper was added to Zotero, so a folder sorted by either keeps
+ * Zotero's order. iCloud carries the creation date to Windows, where Explorer's
+ * Date created column has the same order. An added PDF would otherwise get today's
+ * dates, and ZotMoov moving it into its folder later resets Date Added again, so
+ * for Add PDF this waits for that move first.
+ *
  * Highlights stay on the attachment. They're stored as page positions, so on a
  * re-laid-out version they'd sit over the wrong text; the confirmation says how
  * many there are before anything changes.
@@ -140,6 +147,57 @@ function writeInPlace(path, bytes) {
   }
 }
 
+// When a paper was added to Zotero (a standalone PDF: when it was).
+function paperAdded(att) {
+  return Zotero.Date.sqlToDate((att.parentItem || att).dateAdded, true);
+}
+
+// Set a file's Date Created and Date Added on macOS. Date Added is the time the
+// file entered its folder, which no file API exposes, so call setattrlist(2).
+const ATTR_BIT_MAP_COUNT = 5;
+const ATTR_CMN_CRTIME = 0x00000200;
+const ATTR_CMN_ADDEDTIME = 0x10000000;
+function setFileDates(path, date) {
+  if (!Zotero.isMac) return;
+  let { ctypes } = ChromeUtils.importESModule("resource://gre/modules/ctypes.sys.mjs");
+  let libc = ctypes.open("libSystem.B.dylib");
+  try {
+    let attrlist = ctypes.StructType("attrlist", [
+      { bitmapcount: ctypes.unsigned_short }, { reserved: ctypes.uint16_t },
+      { commonattr: ctypes.uint32_t }, { volattr: ctypes.uint32_t }, { dirattr: ctypes.uint32_t },
+      { fileattr: ctypes.uint32_t }, { forkattr: ctypes.uint32_t },
+    ]);
+    let timespec = ctypes.StructType("timespec", [{ tv_sec: ctypes.long }, { tv_nsec: ctypes.long }]);
+    let setattrlist = libc.declare("setattrlist", ctypes.default_abi, ctypes.int,
+      ctypes.char.ptr, attrlist.ptr, ctypes.voidptr_t, ctypes.size_t, ctypes.unsigned_int);
+    let list = new attrlist(ATTR_BIT_MAP_COUNT, 0, ATTR_CMN_CRTIME | ATTR_CMN_ADDEDTIME, 0, 0, 0, 0);
+    let sec = Math.floor(date.getTime() / 1000);
+    // One value per attribute, in bit order: created, then added.
+    let Times = ctypes.ArrayType(timespec, 2);
+    let times = new Times([new timespec(sec, 0), new timespec(sec, 0)]);
+    if (setattrlist(path, list.address(), times.address(), Times.size, 0) !== 0) {
+      throw new Error(`setattrlist failed for ${path} (errno ${ctypes.errno})`);
+    }
+    log(`Date Created and Date Added of ${PathUtils.filename(path)} set to ${date.toISOString()}`);
+  }
+  finally {
+    libc.close();
+  }
+}
+
+// ZotMoov moves a new attachment into its folder a moment after it's added, and
+// the move resets Date Added. Wait for the file to land there (up to a minute),
+// then set the dates; without ZotMoov, set them where Zotero put it.
+async function matchDatesOnceMoved(att) {
+  let dst = Zotero.Prefs.get("extensions.zotmoov.dst_dir", true);
+  let path = await att.getFilePathAsync();
+  for (let i = 0; dst && i < 60 && !(path && isInside(path, dst)); i++) {
+    await Zotero.Promise.delay(1000);
+    path = await att.getFilePathAsync();
+  }
+  if (path) setFileDates(path, paperAdded(att));
+}
+
 function alert(win, msg) {
   Services.prompt.alert(win, TITLE, msg);
 }
@@ -178,6 +236,7 @@ async function addPDF(items, win) {
     await removeIfDownloaded(path, bytes);
   }
   log(`${name}: added ${PathUtils.filename(path)}`);
+  matchDatesOnceMoved(att).catch(e => Zotero.logError(e));
 }
 
 async function replacePDF(items, win) {
@@ -249,6 +308,14 @@ async function replacePDF(items, win) {
   }
   log(`${name}: replaced ${path}`);
 
+  // Writing in place already keeps the file's Date Created and Date Added; this
+  // also corrects them if they were wrong before.
+  try {
+    setFileDates(path, paperAdded(att));
+  }
+  catch (e) {
+    Zotero.logError(e);
+  }
   try {
     await IOUtils.remove(backup);
   }

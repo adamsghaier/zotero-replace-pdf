@@ -27,6 +27,12 @@ treat it exactly like a dragged-in PDF.
 Downloads folder it's removed once Zotero's copy has been verified byte for byte, as
 ZotMoov's Attach New File does. A file picked from anywhere else is left alone.
 
+**File dates follow Zotero (macOS).** With either action the PDF's Date Created and
+Date Added are set to the date the paper was added to Zotero, so a folder of PDFs
+sorted by either stays in Zotero's order (in iCloud Drive, Windows' Date created too). For Add PDF this happens once ZotMoov
+has moved the file into its folder (it waits up to a minute), since that move would
+otherwise reset it.
+
 **It also hides Better BibTeX's submenu** in the item right-click menu, to keep that
 menu short. Better BibTeX's Tools and File menus are unaffected. (It sets the item's `hidden`
 property, since macOS's native menus ignore CSS.)
