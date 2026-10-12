@@ -12,9 +12,10 @@ that badly. iCloud for Windows, for one, can end up showing the file as
 `Name (1).pdf`. Writing in place is an ordinary edit, so it syncs cleanly, and
 tags, notes and links to the attachment are left alone.
 
-- Checks the new file is a PDF and differs from the current one, then asks you to
-  confirm. It shows how many highlights are on the PDF: they stay at the same
-  page positions, so they may be misplaced if the new version is laid out differently.
+- Checks the new file is a PDF and differs from the current one, then replaces it
+  straight away. If the PDF has highlights it asks first and says how many: they stay
+  at the same page positions, so they may be misplaced if the new version is laid out
+  differently.
 - Copies the old PDF aside, writes and verifies the new one, and puts the old one
   back if verification fails. Once it succeeds, the old PDF is deleted (no undo).
 - Closes and reopens the PDF if it's open, and reindexes it for full-text search.

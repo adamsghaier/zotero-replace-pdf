@@ -35,8 +35,8 @@
  * Replace PDF writes in place, which keeps both dates; it only corrects Date Added.
  *
  * Highlights stay on the attachment. They're stored as page positions, so on a
- * re-laid-out version they'd sit over the wrong text; the confirmation says how
- * many there are before anything changes.
+ * re-laid-out version they'd sit over the wrong text, so Replace PDF asks first
+ * (saying how many) only when there are some; otherwise it replaces at once.
  *
  * It also hides Better BibTeX's submenu in the item context menu, to keep that
  * menu short. Better BibTeX's Tools and File menus are unaffected. On macOS that
@@ -324,20 +324,17 @@ async function replacePDF(items, win) {
     return;
   }
 
+  // Ask first only when the PDF has highlights, which could end up misplaced.
   let n = att.getAnnotations().length;
-  let msg = `Replace ${name}'s PDF?\n\n`
-    + `${PathUtils.filename(path)} (${mb(oldBytes)})  ←  ${PathUtils.filename(newPath)} (${mb(newBytes)})\n\n`
-    + "The file keeps its name, so iCloud syncs this as an edit. The note and tags don't change. "
-    + "The old PDF is deleted, so there's no undo.";
-  if (isInside(newPath, downloadsDir())) {
-    msg += ` ${PathUtils.filename(newPath)} is removed from Downloads.`;
-  }
   if (n) {
-    msg += `\n\n${n} highlight${n === 1 ? "" : "s"} / annotation${n === 1 ? "" : "s"} stay on this PDF `
+    let msg = `Replace ${name}'s PDF?\n\n`
+      + `${PathUtils.filename(path)} (${mb(oldBytes)})  ←  ${PathUtils.filename(newPath)} (${mb(newBytes)})\n\n`
+      + `${n} highlight${n === 1 ? "" : "s"} / annotation${n === 1 ? "" : "s"} stay on this PDF `
       + "at the same page positions. If the new version is laid out differently they'll sit over "
-      + "the wrong text. Their text and comments in your note are unaffected.";
+      + "the wrong text. Their text and comments in your note are unaffected.\n\n"
+      + "The old PDF is deleted, so there's no undo.";
+    if (!Services.prompt.confirm(win, TITLE, msg)) return;
   }
-  if (!Services.prompt.confirm(win, TITLE, msg)) return;
 
   // An open reader keeps showing the old file; close it now, reopen it after.
   let open = (Zotero.Reader._readers || []).filter(r => r.itemID === att.id);
