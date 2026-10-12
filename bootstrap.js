@@ -18,8 +18,8 @@
  * verified, that copy is deleted. There's no undo.
  *
  * Add PDF attaches the picked file the way Zotero's own Add Attachment → File
- * does (same import and renaming), so ZotMoov then moves it into place exactly as
- * it does a dragged-in PDF.
+ * does (same import and renaming), then has ZotMoov move it into place at once,
+ * with ZotMoov's own settings, instead of after ZotMoov's 5-second wait.
  *
  * Either way, like ZotMoov's own Attach New File, the picked file is removed from
  * Downloads once Zotero's copy has verified byte for byte. A file picked from
@@ -31,9 +31,8 @@
  * has the same order. But changing the creation date of a file iCloud has already
  * synced makes iCloud for Windows show it as "<name> (1).pdf", so it's only ever set
  * on a new PDF while it's still in Zotero's storage: ZotMoov's move into its folder
- * keeps it. That move resets Date Added, so Add PDF waits for it and then sets Date
- * Added. Replace PDF writes in place, which keeps both dates; it only corrects Date
- * Added.
+ * keeps it. That move resets Date Added, so Add PDF sets Date Added after it.
+ * Replace PDF writes in place, which keeps both dates; it only corrects Date Added.
  *
  * Highlights stay on the attachment. They're stored as page positions, so on a
  * re-laid-out version they'd sit over the wrong text; the confirmation says how
@@ -190,22 +189,67 @@ function setFileDates(path, date, attrs) {
   }
 }
 
-// A new PDF's dates. Date Created is set now, while the file is still in Zotero's
-// storage (ZotMoov's move keeps it); if ZotMoov has already moved it into the synced
-// folder, it's left alone. The move resets Date Added, so wait for the file to land
-// there (up to a minute) and set Date Added then. Without ZotMoov, set both at once.
-async function matchDatesOnceMoved(att) {
+// Have ZotMoov move a new attachment into its folder now, with its own settings,
+// rather than after its auto_process_delay (5 s by default, restarted by every item
+// change). ZotMoov's move makes a new linked attachment and erases this one; its
+// timed pass then skips the new one, since it skips linked files. The moved
+// attachment, or null (no ZotMoov, auto-move off or set to copy, or the move failed:
+// the timed pass then still moves it).
+async function moveWithZotMoov(att) {
+  let zm = Zotero.ZotMoov;
+  let dst = Zotero.Prefs.get("extensions.zotmoov.dst_dir", true);
+  if (!zm || !dst || !Zotero.Prefs.get("extensions.zotmoov.enable_automove", true)
+      || Zotero.Prefs.get("extensions.zotmoov.file_behavior", true) != "move") {
+    return null;
+  }
+  try {
+    let prefs = zm.getBasePrefs();
+    prefs.ignore_linked = true;     // as its timed pass does
+    let [moved] = await zm.move([att], dst, prefs);
+    return moved || null;
+  }
+  catch (e) {
+    Zotero.logError(e);
+    return null;
+  }
+}
+
+// The paper's PDF once it's in ZotMoov's folder: the attachment that replaced att.
+async function movedPDF(parent, dst) {
+  for (let a of Zotero.Items.get(parent.getAttachments())) {
+    if (a.deleted || !a.isPDFAttachment()) continue;
+    let path = await a.getFilePathAsync();
+    if (path && isInside(path, dst)) return a;
+  }
+  return null;
+}
+
+// A new PDF's dates, and its move. Date Created is set first, while the file is
+// still in Zotero's storage (ZotMoov's move keeps it); if it's already in the synced
+// folder, it's left alone. Then ZotMoov moves it, which resets Date Added, so Date
+// Added is set on the moved file. If ZotMoov's timed pass does the move instead,
+// wait for it (up to a minute). Without ZotMoov, set both at once.
+async function moveAndMatchDates(att) {
   let dst = Zotero.Prefs.get("extensions.zotmoov.dst_dir", true);
   let date = paperAdded(att);
+  let parent = att.parentItem;
   let path = await att.getFilePathAsync();
   if (path && !(dst && isInside(path, dst))) {
-    setFileDates(path, date, ATTR_CMN_CRTIME | ATTR_CMN_ADDEDTIME);
+    try {
+      setFileDates(path, date, ATTR_CMN_CRTIME | ATTR_CMN_ADDEDTIME);
+    }
+    catch (e) {
+      Zotero.logError(e);
+    }
   }
   if (!dst) return;
-  for (let i = 0; i < 60 && !(path && isInside(path, dst)); i++) {
+  let moved = await moveWithZotMoov(att);
+  if (moved) log(`moved ${PathUtils.filename(await moved.getFilePathAsync() || "")} into ${dst}`);
+  for (let i = 0; i < 60 && !moved; i++) {
     await Zotero.Promise.delay(1000);
-    path = await att.getFilePathAsync();
+    moved = await movedPDF(parent, dst);
   }
+  path = moved && await moved.getFilePathAsync();
   if (path) setFileDates(path, date, ATTR_CMN_ADDEDTIME);
 }
 
@@ -238,7 +282,7 @@ async function addPDF(items, win) {
   }
 
   // Zotero's own Add Attachment → File, with the file already chosen: same import,
-  // same renaming. ZotMoov moves it into place a few seconds later.
+  // same renaming. Then ZotMoov moves it into place straight away.
   let added = await Zotero.getActiveZoteroPane().addAttachmentFromDialog(false, parent.id, [path]);
   let att = added && added[0];
   if (!att) return;
@@ -247,7 +291,7 @@ async function addPDF(items, win) {
     await removeIfDownloaded(path, bytes);
   }
   log(`${name}: added ${PathUtils.filename(path)}`);
-  matchDatesOnceMoved(att).catch(e => Zotero.logError(e));
+  moveAndMatchDates(att).catch(e => Zotero.logError(e));
 }
 
 async function replacePDF(items, win) {

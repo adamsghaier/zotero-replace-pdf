@@ -20,8 +20,9 @@ tags, notes and links to the attachment are left alone.
 - Closes and reopens the PDF if it's open, and reindexes it for full-text search.
 
 **Add PDF** attaches the file the same way as Zotero's own Add Attachment → File…
-(same import and renaming), so plugins that act on new attachments, such as ZotMoov,
-treat it exactly like a dragged-in PDF.
+(same import and renaming). If ZotMoov is set to move new files, Add PDF has it move
+this one straight away, with ZotMoov's own settings, instead of after ZotMoov's usual
+5-second wait.
 
 **Downloads are tidied up.** With either action, if the file you picked is in your
 Downloads folder it's removed once Zotero's copy has been verified byte for byte, as
@@ -32,9 +33,8 @@ Date Added are set to the date the paper was added to Zotero, so a folder of PDF
 sorted by either stays in Zotero's order (in iCloud Drive, Windows' Date created too).
 The creation date is only set on a new PDF before it reaches the synced folder: changing
 it on a file iCloud has already synced makes iCloud for Windows show it as `Name (1).pdf`.
-Replace PDF keeps both dates, and only corrects Date Added. For Add PDF this happens once ZotMoov
-has moved the file into its folder (it waits up to a minute), since that move would
-otherwise reset it.
+Replace PDF keeps both dates, and only corrects Date Added. For Add PDF, Date Added is set once ZotMoov
+has moved the file into its folder, since that move would otherwise reset it.
 
 **It also hides Better BibTeX's submenu** in the item right-click menu, to keep that
 menu short. Better BibTeX's Tools and File menus are unaffected. (It sets the item's `hidden`
